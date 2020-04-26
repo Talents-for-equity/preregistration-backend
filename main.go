@@ -12,10 +12,10 @@ import (
 )
 
 type DatabasePreregistration struct {
-	ID              string          `json:"id"`
-	CreatedOn       string          `json:"created_on"`
-	ModifiedOn      string          `json:"modified_on"`
-	DisabledOn      interface{}     `json:"disabled_on"`
+	//ID              string          `json:"id"`
+	//CreatedOn       string          `json:"created_on"`
+	//ModifiedOn      string          `json:"modified_on"`
+	//DisabledOn      interface{}     `json:"disabled_on"`
 	RegistrationRaw Preregistration `json:"registration_raw"`
 }
 
@@ -114,7 +114,9 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 		}
 
 		status := databaseRequest(databasePreregistration)
-		fmt.Fprintf(w, "%+v", string(status))
+		if status == 201 {
+			fmt.Fprintf(w, "%s", "[]")
+		}
 
 	default:
 		fmt.Fprintf(w, "Sorry, only GET and POST methods are supported.")
