@@ -1,12 +1,23 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"html"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 )
+
+type DatabasePreregistration struct {
+	ID              string          `json:"id"`
+	CreatedOn       string          `json:"created_on"`
+	ModifiedOn      string          `json:"modified_on"`
+	DisabledOn      interface{}     `json:"disabled_on"`
+	RegistrationRaw Preregistration `json:"registration_raw"`
+}
 
 type Preregistration struct {
 	Name       string `json:"name"`
@@ -15,6 +26,9 @@ type Preregistration struct {
 	Zip        string `json:"zip"`
 	Linkedin   string `json:"linkedin"`
 	Profession string `json:"profession"`
+	Talent     bool   `json:"talent"`
+	Seeker     bool   `json:"seeker"`
+	Newsletter bool   `json:"newsletter"`
 	Lon        string `json:"lon"`
 	Lat        string `json:"lat"`
 }
@@ -94,12 +108,40 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 		}
 		preregistration.Lat = nom[0].Lat
 		preregistration.Lon = nom[0].Lon
-		out, err := json.Marshal(preregistration)
-		fmt.Fprintf(w, "%+v", string(out))
+		//out, err := json.Marshal(preregistration)
+		databasePreregistration := DatabasePreregistration{
+			RegistrationRaw: preregistration,
+		}
+
+		status := databaseRequest(databasePreregistration)
+		fmt.Fprintf(w, "%+v", string(status))
 
 	default:
 		fmt.Fprintf(w, "Sorry, only GET and POST methods are supported.")
 	}
+}
+
+func databaseRequest(preregistration DatabasePreregistration) (status int) {
+	url := os.Getenv("DB_ADDRESS")
+	key := os.Getenv("DB_KEY")
+
+	preregistrationStr, err := json.Marshal(preregistration)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(preregistrationStr))
+	req.Header.Set("Authorization", key)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	fmt.Println("response Status:", resp.Status)
+	fmt.Println("response Headers:", resp.Header)
+	body, _ := ioutil.ReadAll(resp.Body)
+	fmt.Println("response Body:", string(body))
+	return resp.StatusCode
 }
 
 func main() {
