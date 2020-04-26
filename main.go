@@ -95,9 +95,14 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 		q := req.URL.Query()
 
 		neededParameters := []string{
-			"lat",
+			"profession",
+			"talent",
+			"seeker",
+			"newsletter",
 			"lon",
+			"lat",
 		}
+
 		var selectStrings []string
 		for _, parameter := range neededParameters {
 			selectStrings = append(selectStrings, "registration_raw->>\""+parameter+"\"")
