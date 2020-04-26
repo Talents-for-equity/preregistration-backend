@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 type DatabasePreregistration struct {
@@ -86,7 +87,33 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 	case "OPTIONS":
 		return
 	case "GET":
-		fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
+		url := os.Getenv("DB_ADDRESS")
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			log.Fatal("get error", err)
+		}
+		q := req.URL.Query()
+
+		neededParameters := []string{
+			"lat",
+			"lon",
+		}
+		var selectStrings []string
+		for _, parameter := range neededParameters {
+			selectStrings = append(selectStrings, "registration_raw->>\""+parameter+"\"")
+		}
+
+		q.Add("select", strings.Join(selectStrings, ","))
+		req.URL.RawQuery = q.Encode()
+		resp, err := http.Get(req.URL.String())
+		if resp.StatusCode == http.StatusOK {
+			bodyBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				log.Fatal(err)
+			}
+			bodyString := string(bodyBytes)
+			fmt.Fprintf(w, "%s", bodyString)
+		}
 
 	case "POST":
 		if err := r.ParseForm(); err != nil {
