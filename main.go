@@ -32,6 +32,7 @@ type Preregistration struct {
 	Newsletter bool   `json:"newsletter"`
 	Lon        string `json:"lon"`
 	Lat        string `json:"lat"`
+	Avatar     string `json:"avatar"`
 }
 
 type Nominatim []struct {
@@ -101,6 +102,7 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 			"newsletter",
 			"lon",
 			"lat",
+			"avatar",
 		}
 
 		var selectStrings []string
