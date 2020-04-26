@@ -65,8 +65,8 @@ func nominatimRequest(address string) Nominatim {
 }
 
 func mapping(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	switch r.Method {
-
 	case "GET":
 		fmt.Fprintf(w, "Hello, %q", html.EscapeString(r.URL.Path))
 
@@ -85,7 +85,7 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 
 		nom := nominatimRequest(preregistration.Country + " " + preregistration.Zip)
 		if len(nom) == 0 {
-			fmt.Fprintf(w, "[]")
+			fmt.Fprintf(w, "%s", "[]")
 			return
 		}
 		preregistration.Lat = nom[0].Lat
