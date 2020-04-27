@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -12,12 +11,9 @@ import (
 	"strings"
 )
 
-type DatabasePreregistration struct {
-	//ID              string          `json:"id"`
-	//CreatedOn       string          `json:"created_on"`
-	//ModifiedOn      string          `json:"modified_on"`
-	//DisabledOn      interface{}     `json:"disabled_on"`
-	RegistrationRaw Preregistration `json:"registration_raw"`
+type SibContactResponse struct {
+	Contacts []SibContact `json:"contacts"`
+	Count    int          `json:"count"`
 }
 
 type SibContact struct {
@@ -99,39 +95,50 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 	case "OPTIONS":
 		return
 	case "GET":
-		url := os.Getenv("DB_ADDRESS")
-		req, err := http.NewRequest("GET", url, nil)
+		url := os.Getenv("SIB_ENDPOINT")
+		key := os.Getenv("SIB_KEY")
+
+		req, _ := http.NewRequest("GET", url, nil)
+		req.Header.Add("accept", "application/json")
+		req.Header.Add("api-key", key)
+
+		res, _ := http.DefaultClient.Do(req)
+		defer res.Body.Close()
+
+		sibResponses := SibContactResponse{}
+		err := json.NewDecoder(res.Body).Decode(&sibResponses)
 		if err != nil {
-			log.Fatal("get error", err)
-		}
-		q := req.URL.Query()
-
-		neededParameters := []string{
-			"profession",
-			"talent",
-			"seeker",
-			"newsletter",
-			"lon",
-			"lat",
-			"avatar",
+			log.Fatal(err)
 		}
 
-		var selectStrings []string
-		for _, parameter := range neededParameters {
-			selectStrings = append(selectStrings, "registration_raw->>\""+parameter+"\"")
-		}
-
-		q.Add("select", strings.Join(selectStrings, ","))
-		req.URL.RawQuery = q.Encode()
-		resp, err := http.Get(req.URL.String())
-		if resp.StatusCode == http.StatusOK {
-			bodyBytes, err := ioutil.ReadAll(resp.Body)
+		var preregistrations = []Preregistration{}
+		for _, reg := range sibResponses.Contacts {
+			if reg.Attributes.RAW_JSON == "" {
+				continue
+			}
+			cont := Preregistration{}
+			err := json.NewDecoder(strings.NewReader(reg.Attributes.RAW_JSON)).Decode(&cont)
 			if err != nil {
 				log.Fatal(err)
 			}
-			bodyString := string(bodyBytes)
-			fmt.Fprintf(w, "%s", bodyString)
+
+			preregistrations = append(preregistrations, Preregistration{
+				Name:       "",
+				Email:      "",
+				Country:    "",
+				Zip:        "",
+				Linkedin:   "",
+				Profession: cont.Profession,
+				Talent:     cont.Talent,
+				Seeker:     cont.Seeker,
+				Newsletter: cont.Newsletter,
+				Lon:        cont.Lon,
+				Lat:        cont.Lat,
+				Avatar:     "",
+			})
 		}
+		out, err := json.Marshal(preregistrations)
+		fmt.Fprintf(w, "%s", out)
 
 	case "POST":
 		if err := r.ParseForm(); err != nil {
@@ -154,72 +161,43 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 		preregistration.Lat = nom[0].Lat
 		preregistration.Lon = nom[0].Lon
 		//out, err := json.Marshal(preregistration)
-		databasePreregistration := DatabasePreregistration{
-			RegistrationRaw: preregistration,
+
+		fmt.Fprintf(w, "%s", "[]")
+		key := os.Getenv("SIB_KEY")
+		url := os.Getenv("SIB_ENDPOINT")
+
+		rawJson, err := json.Marshal(preregistration)
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		status := databaseRequest(databasePreregistration)
-		if status == 201 {
-			fmt.Fprintf(w, "%s", "[]")
-			key := os.Getenv("SIB_KEY")
-			url := "https://api.sendinblue.com/v3/contacts"
-
-			rawJson, err := json.Marshal(preregistration)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			sibContact := SibContact{
-				UpdateEnabled: false,
-				Email:         preregistration.Email,
-				Attributes: Attributes{
-					RAW_JSON:   string(rawJson),
-					NEWSLETTER: preregistration.Newsletter,
-				},
-			}
-			sibJson, err := json.Marshal(sibContact)
-			payload := strings.NewReader(string(sibJson))
-			req, _ := http.NewRequest("POST", url, payload)
-
-			req.Header.Add("accept", "application/json")
-			req.Header.Add("api-key", key)
-			req.Header.Add("content-type", "application/json")
-
-			res, _ := http.DefaultClient.Do(req)
-
-			defer res.Body.Close()
-			body, _ := ioutil.ReadAll(res.Body)
-
-			fmt.Println(res)
-			fmt.Println(string(body))
+		sibContact := SibContact{
+			UpdateEnabled: false,
+			Email:         preregistration.Email,
+			Attributes: Attributes{
+				RAW_JSON:   string(rawJson),
+				NEWSLETTER: preregistration.Newsletter,
+			},
 		}
+		sibJson, err := json.Marshal(sibContact)
+		payload := strings.NewReader(string(sibJson))
+		req, _ := http.NewRequest("POST", url, payload)
+
+		req.Header.Add("accept", "application/json")
+		req.Header.Add("api-key", key)
+		req.Header.Add("content-type", "application/json")
+
+		res, _ := http.DefaultClient.Do(req)
+
+		defer res.Body.Close()
+		body, _ := ioutil.ReadAll(res.Body)
+
+		fmt.Println(res)
+		fmt.Println(string(body))
 
 	default:
 		fmt.Fprintf(w, "Sorry, only GET and POST methods are supported.")
 	}
-}
-
-func databaseRequest(preregistration DatabasePreregistration) (status int) {
-	url := os.Getenv("DB_ADDRESS")
-	key := os.Getenv("DB_KEY")
-
-	preregistrationStr, err := json.Marshal(preregistration)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(preregistrationStr))
-	req.Header.Set("Authorization", key)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Headers:", resp.Header)
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Body:", string(body))
-	return resp.StatusCode
 }
 
 func main() {
