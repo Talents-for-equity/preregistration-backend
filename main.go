@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -95,50 +96,13 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 	case "OPTIONS":
 		return
 	case "GET":
-		url := os.Getenv("SIB_ENDPOINT")
-		key := os.Getenv("SIB_KEY")
-
-		req, _ := http.NewRequest("GET", url, nil)
-		req.Header.Add("accept", "application/json")
-		req.Header.Add("api-key", key)
-
-		res, _ := http.DefaultClient.Do(req)
-		defer res.Body.Close()
-
-		sibResponses := SibContactResponse{}
-		err := json.NewDecoder(res.Body).Decode(&sibResponses)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		var preregistrations = []Preregistration{}
-		for _, reg := range sibResponses.Contacts {
-			if reg.Attributes.RAW_JSON == "" {
-				continue
-			}
-			cont := Preregistration{}
-			err := json.NewDecoder(strings.NewReader(reg.Attributes.RAW_JSON)).Decode(&cont)
-			if err != nil || cont.Lat == "" || cont.Lon == "" {
-				continue
-			}
-			preregistrations = append(preregistrations, Preregistration{
-				Name:       "",
-				Email:      "",
-				Country:    "",
-				Zip:        "",
-				Linkedin:   "",
-				Profession: cont.Profession,
-				Talent:     cont.Talent,
-				Seeker:     cont.Seeker,
-				Newsletter: cont.Newsletter,
-				Lon:        cont.Lon,
-				Lat:        cont.Lat,
-				Avatar:     "",
-			})
-		}
+		err, preregistrations := getPreregistrations()
 		out, err := json.Marshal(preregistrations)
-		fmt.Fprintf(w, "%s", out)
-
+		if err != nil {
+			fmt.Fprintf(w, "%s", "{}")
+		} else {
+			fmt.Fprintf(w, "%s", out)
+		}
 	case "POST":
 		if err := r.ParseForm(); err != nil {
 			fmt.Fprintf(w, "ParseForm() err: %v", err)
@@ -199,9 +163,69 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getPreregistrations() (error, []Preregistration) {
+	url := os.Getenv("SIB_ENDPOINT")
+	key := os.Getenv("SIB_KEY")
+
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Add("accept", "application/json")
+	req.Header.Add("api-key", key)
+
+	res, _ := http.DefaultClient.Do(req)
+	defer res.Body.Close()
+
+	sibResponses := SibContactResponse{}
+	err := json.NewDecoder(res.Body).Decode(&sibResponses)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var preregistrations = []Preregistration{}
+	preregistrations = sibsToPreregistrations(sibResponses, preregistrations)
+	return err, preregistrations
+}
+
+func sibsToPreregistrations(sibResponses SibContactResponse, preregistrations []Preregistration) []Preregistration {
+	for _, reg := range sibResponses.Contacts {
+		if reg.Attributes.RAW_JSON == "" {
+			continue
+		}
+		cont := Preregistration{}
+		err := json.NewDecoder(strings.NewReader(reg.Attributes.RAW_JSON)).Decode(&cont)
+		if err != nil || cont.Lat == "" || cont.Lon == "" {
+			continue
+		}
+		preregistrations = append(preregistrations, Preregistration{
+			Name:       "",
+			Email:      "",
+			Country:    "",
+			Zip:        "",
+			Linkedin:   "",
+			Profession: cont.Profession,
+			Talent:     cont.Talent,
+			Seeker:     cont.Seeker,
+			Newsletter: cont.Newsletter,
+			Lon:        cont.Lon,
+			Lat:        cont.Lat,
+			Avatar:     "",
+		})
+	}
+	return preregistrations
+}
+
+func counter(w http.ResponseWriter, r *http.Request) {
+	err, ps := getPreregistrations()
+	if err != nil {
+		fmt.Fprintf(w, "433")
+	} else {
+		fmt.Fprintf(w, strconv.Itoa(len(ps)))
+	}
+}
+
 func main() {
 	http.HandleFunc("/", root)
 	http.HandleFunc("/mapping", mapping)
+	http.HandleFunc("/count", counter)
 
 	port := ":8080"
 	log.Println("Listening on" + port)
