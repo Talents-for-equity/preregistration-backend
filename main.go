@@ -20,6 +20,17 @@ type DatabasePreregistration struct {
 	RegistrationRaw Preregistration `json:"registration_raw"`
 }
 
+type SibContact struct {
+	UpdateEnabled bool       `json:"updateEnabled"`
+	Email         string     `json:"email"`
+	Attributes    Attributes `json:"attributes"`
+}
+
+type Attributes struct {
+	RAW_JSON   string `json:"RAW_JSON"`
+	NEWSLETTER bool   `json:"NEWSLETTER"`
+}
+
 type Preregistration struct {
 	Name       string `json:"name"`
 	Email      string `json:"email"`
@@ -150,6 +161,37 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 		status := databaseRequest(databasePreregistration)
 		if status == 201 {
 			fmt.Fprintf(w, "%s", "[]")
+			key := os.Getenv("SIB_KEY")
+			url := "https://api.sendinblue.com/v3/contacts"
+
+			rawJson, err := json.Marshal(preregistration)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			sibContact := SibContact{
+				UpdateEnabled: false,
+				Email:         preregistration.Email,
+				Attributes: Attributes{
+					RAW_JSON:   string(rawJson),
+					NEWSLETTER: preregistration.Newsletter,
+				},
+			}
+			sibJson, err := json.Marshal(sibContact)
+			payload := strings.NewReader(string(sibJson))
+			req, _ := http.NewRequest("POST", url, payload)
+
+			req.Header.Add("accept", "application/json")
+			req.Header.Add("api-key", key)
+			req.Header.Add("content-type", "application/json")
+
+			res, _ := http.DefaultClient.Do(req)
+
+			defer res.Body.Close()
+			body, _ := ioutil.ReadAll(res.Body)
+
+			fmt.Println(res)
+			fmt.Println(string(body))
 		}
 
 	default:
