@@ -118,10 +118,9 @@ func mapping(w http.ResponseWriter, r *http.Request) {
 			}
 			cont := Preregistration{}
 			err := json.NewDecoder(strings.NewReader(reg.Attributes.RAW_JSON)).Decode(&cont)
-			if err != nil {
-				log.Fatal(err)
+			if err != nil || cont.Lat == "" || cont.Lon == "" {
+				continue
 			}
-
 			preregistrations = append(preregistrations, Preregistration{
 				Name:       "",
 				Email:      "",
